@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TTLINK Admin</title>
+<style>
+  body{font-family:system-ui,sans-serif;max-width:760px;margin:20px auto;padding:0 16px;color:#222}
+  label{display:block;margin:8px 0 2px;font-size:.85rem;color:#555}
+  input,select,button{font:inherit;padding:7px;width:100%;box-sizing:border-box}
+  button{width:auto;cursor:pointer;margin-top:12px}
+  table{width:100%;border-collapse:collapse;margin-top:20px;font-size:.85rem}
+  td,th{border-bottom:1px solid #ddd;padding:6px;text-align:left}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  #out{margin-top:12px;word-break:break-all;background:#f3f3f3;padding:8px}
+</style>
+</head>
+<body>
+<h2>Crear link de apertura</h2>
+<label>API key <input id="key" type="password"></label>
+<label>Cerradura <select id="lock"></select></label>
+<div class="row">
+  <div><label>Huésped <input id="guest"></label></div>
+  <div><label>Habitación <input id="room"></label></div>
+  <div><label>Desde <input id="from" type="datetime-local"></label></div>
+  <div><label>Hasta <input id="to" type="datetime-local"></label></div>
+  <div><label>Máx. aperturas (0 = sin límite) <input id="max" type="number" value="0"></label></div>
+  <div><label>Usuario TTLock para eKey (opcional) <input id="recv" placeholder="email o móvil"></label></div>
+</div>
+<button id="go">Crear link</button> <button id="reload">Cargar cerraduras / links</button>
+<div id="out"></div>
+<table><thead><tr><th>ID</th><th>Huésped</th><th>Estado</th><th>Usos</th><th>Link</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+<script>
+const $=id=>document.getElementById(id);
+const api=(p,o={})=>fetch(p,{...o,headers:{'X-API-Key':$('key').value,'Content-Type':'application/json'}}).then(async r=>{const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.status);return j});
+async function load(){
+  try{
+    const locks=await api('/api/locks');
+    $('lock').innerHTML=locks.map(l=>`<option value="${l.lockId}">${l.lockAlias||l.lockName} (${l.lockId})</option>`).join('');
+    const acc=await api('/api/accesses');
+    $('rows').innerHTML=acc.map(a=>`<tr><td>${a.id}</td><td>${a.guest_name}</td><td>${a.state}</td><td>${a.unlock_count}</td><td><a href="${a.url}" target="_blank">abrir</a></td><td><button onclick="rev(${a.id})">Revocar</button></td></tr>`).join('');
+  }catch(e){$('out').textContent='Error: '+e.message}
+}
+async function rev(id){await api('/api/accesses/'+id,{method:'DELETE'});load()}
+$('reload').onclick=load;
+$('go').onclick=async()=>{
+  try{
+    const a=await api('/api/accesses',{method:'POST',body:JSON.stringify({
+      lock_id:+$('lock').value,guest_name:$('guest').value,room_label:$('room').value,
+      valid_from:new Date($('from').value).toISOString(),valid_to:new Date($('to').value).toISOString(),
+      max_unlocks:+$('max').value,receiver_username:$('recv').value||null})});
+    $('out').textContent=a.url;load();
+  }catch(e){$('out').textContent='Error: '+e.message}
+};
+</script>
+</body>
+</html>

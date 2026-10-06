@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Acceso a su habitación</title>
+<style>
+  :root{--bg:#14110f;--card:#1f1a16;--gold:#c9a45c;--text:#f4ede2;--muted:#9a8f80;--ok:#6bbf8a;--err:#e07a6b}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font-family:Georgia,'Times New Roman',serif;display:flex;align-items:center;justify-content:center;padding:20px}
+  main{width:100%;max-width:380px;text-align:center}
+  .hotel{letter-spacing:.3em;text-transform:uppercase;color:var(--gold);font-size:.8rem}
+  h1{font-weight:400;font-size:1.7rem;margin:.6rem 0 .2rem}
+  .room{color:var(--muted);margin-bottom:1.6rem}
+  .card{background:var(--card);border:1px solid #33291f;border-radius:18px;padding:28px 20px}
+  .window{color:var(--muted);font-size:.85rem;margin-top:18px;line-height:1.5}
+  button{width:170px;height:170px;border-radius:50%;border:2px solid var(--gold);background:transparent;color:var(--gold);font:inherit;font-size:1.2rem;letter-spacing:.05em;cursor:pointer;transition:.2s}
+  button:active{transform:scale(.96)}
+  button:disabled{opacity:.5;cursor:default}
+  button.ok{border-color:var(--ok);color:var(--ok)}
+  #msg{min-height:1.4em;margin-top:18px;font-size:.95rem}
+  .err{color:var(--err)}.good{color:var(--ok)}
+</style>
+</head>
+<body>
+<main>
+  <div class="hotel" id="hotel">&nbsp;</div>
+  <h1 id="greet">Bienvenido</h1>
+  <div class="room" id="room"></div>
+  <div class="card">
+    <button id="btn" disabled>Abrir<br>puerta</button>
+    <div id="msg"></div>
+    <div class="window" id="window"></div>
+  </div>
+</main>
+<script>
+const token = location.pathname.split('/').pop();
+const $ = id => document.getElementById(id);
+const fmt = d => new Date(d.endsWith('Z')||/[+-]\d\d:?\d\d$/.test(d)?d:d+'Z').toLocaleString('es',{dateStyle:'medium',timeStyle:'short'});
+const STATES = {revoked:'Este acceso fue cancelado.',expired:'Este acceso ha expirado.',not_started:'Este acceso aún no está activo.',exhausted:'Se alcanzó el límite de aperturas.'};
+function say(t,cls){$('msg').textContent=t;$('msg').className=cls||''}
+
+fetch('/api/o/'+token).then(r=>{if(!r.ok)throw 0;return r.json()}).then(i=>{
+  $('hotel').textContent=i.hotel;
+  $('greet').textContent='Bienvenido, '+i.guest_name;
+  $('room').textContent=i.room_label;
+  $('window').textContent='Válido del '+fmt(i.valid_from)+' al '+fmt(i.valid_to);
+  if(i.state==='active')$('btn').disabled=false; else say(STATES[i.state]||'No disponible.','err');
+}).catch(()=>say('Enlace no válido.','err'));
+
+$('btn').onclick=async()=>{
+  const b=$('btn');b.disabled=true;say('Abriendo…');
+  try{
+    const r=await fetch('/api/o/'+token+'/unlock',{method:'POST'});
+    const j=await r.json().catch(()=>({}));
+    if(r.ok){b.classList.add('ok');say('Puerta abierta','good');setTimeout(()=>{b.classList.remove('ok');b.disabled=false;say('')},6000);return}
+    say(r.status===403?(STATES[j.detail]||'Acceso no disponible.'):r.status===429?'Espere unos segundos e intente de nuevo.':(j.detail||'Error al abrir.'),'err');
+    if(r.status!==403)setTimeout(()=>b.disabled=false,3000);
+  }catch(e){say('Sin conexión. Intente de nuevo.','err');b.disabled=false}
+};
+</script>
+</body>
+</html>
