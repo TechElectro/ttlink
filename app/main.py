@@ -74,6 +74,14 @@ class AccessIn(BaseModel):
         return v
 
 
+def _card_variants(number: str) -> set[str]:
+    """El número tal como lo lee el lector y con los bytes invertidos: según el
+    endpoint usado, TTLock lo guarda en una u otra forma."""
+    n = int(number)
+    raw = n.to_bytes(max(4, (n.bit_length() + 7) // 8), "big")
+    return {number, str(n), str(int.from_bytes(raw[::-1], "big"))}
+
+
 def _card_error(e: TTLockError) -> str:
     return ERRORS.get(e.errcode, f"TTLock no pudo registrar la tarjeta: {e.errmsg} ({e.errcode})")
 
@@ -87,7 +95,8 @@ def _free_card(db: Session, lock_id: int, number: str) -> None:
         if link_state(other) in live:
             raise HTTPException(409, _card_taken(other))
     try:
-        stale = [c for c in client.list_cards(lock_id) if c.get("cardNumber") == number]
+        variants = _card_variants(number)
+        stale = [c for c in client.list_cards(lock_id) if str(c.get("cardNumber")) in variants]
         for c in stale:
             owner = db.scalar(select(Access).where(Access.card_id == c["cardId"]))
             if not owner:

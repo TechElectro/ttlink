@@ -119,6 +119,11 @@ def test_card():
         assert r.status_code == 409 and "fuera del sistema" in r.json()["detail"]
         assert 500 in fake.cards
 
+        # la misma tarjeta guardada en la cerradura con los bytes invertidos también se detecta
+        fake.cards[501] = (5, "546164310")  # = 1456377120 invertido (56ce8d20 -> 208dce56)
+        r = tc.post("/api/accesses", headers=H, json={**_body(), "lock_id": 5, "card_number": "1456377120"})
+        assert r.status_code == 409 and 501 in fake.cards
+
         # número inválido -> 422
         assert tc.post("/api/accesses", headers=H, json={**_body(), "card_number": "12AB34"}).status_code == 422
 
