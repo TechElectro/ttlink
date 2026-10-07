@@ -1,0 +1,31 @@
+services:
+  app:
+    build: .
+    container_name: ttlink-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: sqlite:////data/ttlink.db
+      TZ: America/Caracas
+    volumes:
+      - ttlink_data:/data
+    healthcheck:
+      # Sin curl en la imagen slim; la app no tiene endpoint de salud
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/openapi.json', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    labels:
+      - "autoheal=true"
+    mem_limit: 256m
+    cpus: 0.5
+    # Sin puerto publicado: solo Caddy (/opt/proxy) entra por la red interna
+    networks: [ttlink_net]
+
+volumes:
+  ttlink_data:
+
+networks:
+  ttlink_net:
+    driver: bridge

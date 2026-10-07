@@ -7,3 +7,5 @@ FastAPI que emite links tipo hotel (`/o/{token}`) para abrir una cerradura TTLoc
 - Tests: `.venv\Scripts\python.exe -m pytest` (cliente TTLock mockeado).
 - La apertura remota la ejecuta el token de la cuenta dueña, no la eKey del huésped.
 - Sin probar contra cuenta/cerradura real todavía. `TTLOCK_API_BASE` por defecto `https://euapi.ttlock.com`; la doc usa `https://api.sciener.com`.
+- Producción (Docker): `docker compose up -d --build` con `.env` al lado; 1 solo worker (SQLite + token OAuth en memoria). Sin puertos publicados: se expone por un reverse proxy (Caddy) en la red `ttlink_ttlink_net`. SQLite en el volumen `ttlink_data` (`/data/ttlink.db`).
+- Respaldo: `backup_ttlink.sh` (copia SQLite consistente, cifrada con gpg; requiere `.backup_passphrase`, que no se versiona).

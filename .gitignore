@@ -5,3 +5,5 @@ __pycache__/
 bin/
 *.log
 .pytest_cache/
+.backup_passphrase
+backups/

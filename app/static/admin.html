@@ -2,56 +2,400 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TTLINK Admin</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Llaves digitales | Visa Hotel</title>
 <style>
-  body{font-family:system-ui,sans-serif;max-width:760px;margin:20px auto;padding:0 16px;color:#222}
-  label{display:block;margin:8px 0 2px;font-size:.85rem;color:#555}
-  input,select,button{font:inherit;padding:7px;width:100%;box-sizing:border-box}
-  button{width:auto;cursor:pointer;margin-top:12px}
-  table{width:100%;border-collapse:collapse;margin-top:20px;font-size:.85rem}
-  td,th{border-bottom:1px solid #ddd;padding:6px;text-align:left}
-  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  #out{margin-top:12px;word-break:break-all;background:#f3f3f3;padding:8px}
+  :root{
+    --bg:#14110f;--card:#1f1a16;--card-2:#28211b;--line:#33291f;
+    --gold:#c9a45c;--gold-soft:#c9a45c26;--text:#f4ede2;--muted:#9a8f80;
+    --ok:#6bbf8a;--err:#e07a6b;
+    --serif:Georgia,'Times New Roman',serif;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{color-scheme:dark}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:15px/1.5 var(--sans)}
+  [hidden]{display:none!important}
+  a{color:var(--gold)}
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+
+  /* ---------- cabecera ---------- */
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;
+    max-width:1120px;margin:0 auto;padding:28px 16px 20px;border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:14px}
+  .brand svg{flex:none;color:var(--gold)}
+  .hotel{font-family:var(--serif);letter-spacing:.3em;text-transform:uppercase;color:var(--gold);font-size:.85rem}
+  .brand h1{font:400 1.45rem/1.2 var(--serif);margin:2px 0 0}
+
+  /* ---------- botones / campos ---------- */
+  button,.btn{font:inherit;cursor:pointer;text-decoration:none;display:inline-block;border-radius:8px;padding:9px 16px;border:1px solid var(--line);
+    background:var(--card-2);color:var(--text)}
+  button:hover,.btn:hover{border-color:var(--gold)}
+  button:disabled{opacity:.5;cursor:default}
+  button.primary{background:var(--gold);border-color:var(--gold);color:#1a140c;font-weight:600}
+  button.primary:hover{background:#d6b471}
+  button.ghost{background:transparent}
+  button.danger:hover{border-color:var(--err);color:var(--err)}
+  .small{padding:5px 11px;font-size:.85rem}
+  label{display:block;font-size:.85rem;color:var(--muted);margin:14px 0 5px}
+  input,select{font:inherit;width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--line);
+    background:var(--bg);color:var(--text)}
+  input:focus,select:focus{outline:none;border-color:var(--gold)}
+  .hint{font-size:.8rem;color:var(--muted);margin-top:4px}
+  .err-text{color:var(--err);font-size:.9rem;min-height:1.3em;margin-top:10px}
+
+  /* ---------- login ---------- */
+  #login{max-width:380px;margin:12vh auto 0;padding:0 16px;text-align:center}
+  #login .hotel{display:block;margin-bottom:10px}
+  #login h2{font:400 1.7rem/1.25 var(--serif);margin:0 0 6px}
+  #login p{color:var(--muted);margin:0 0 22px}
+  #login form{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 20px;text-align:left}
+  #login label{margin-top:0}
+  #login button{width:100%;margin-top:16px}
+
+  /* ---------- panel ---------- */
+  main{max-width:1120px;margin:0 auto;padding:24px 16px 60px;
+    display:grid;grid-template-columns:410px 1fr;gap:28px;align-items:start}
+  section h2{font:400 1.25rem/1.3 var(--serif);margin:0 0 4px}
+  section > .sub{color:var(--muted);font-size:.9rem;margin:0 0 6px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+  main > section{min-width:0}
+  .row2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 12px}
+  input{min-width:0}
+  details{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+  summary{cursor:pointer;color:var(--muted);font-size:.9rem}
+  #create{width:100%;margin-top:20px;padding:11px}
+
+  /* tarjeta-llave: el link recién emitido */
+  .keycard{margin-top:20px;border-radius:16px;padding:22px 22px 18px;position:relative;overflow:hidden;
+    background:linear-gradient(135deg,#2e2418 0%,#1f1a16 70%);border:1px solid var(--gold);
+    animation:issue .45s ease-out}
+  .keycard::after{content:"";position:absolute;right:-40px;top:-40px;width:150px;height:150px;border-radius:50%;
+    border:1px solid var(--gold-soft);box-shadow:0 0 0 18px #c9a45c0d}
+  .keycard .hotel{font-size:.7rem}
+  .keycard .room{font:400 3rem/1 var(--serif);color:var(--gold);margin:14px 0 4px}
+  .keycard .guest{font:400 1.1rem var(--serif)}
+  .keycard .dates{color:var(--muted);font-size:.85rem;margin-top:6px}
+  .keycard .url{margin-top:14px;font-size:.78rem;color:var(--muted);word-break:break-all}
+  .keycard .actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;position:relative;z-index:1}
+  @keyframes issue{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+
+  /* casillero de llaves */
+  .list-head{display:flex;align-items:end;justify-content:space-between;gap:12px;margin-bottom:12px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{border:0;border-radius:0;background:transparent;color:var(--muted);padding:6px 14px}
+  .seg button[aria-pressed="true"]{background:var(--gold-soft);color:var(--gold)}
+  .keys{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--card)}
+  .key{display:grid;grid-template-columns:76px 1fr auto;gap:4px 16px;align-items:center;padding:14px 18px;border-top:1px solid var(--line)}
+  .key:first-child{border-top:0}
+  .key .no{font:400 1.6rem/1 var(--serif);color:var(--gold);text-align:center;word-break:break-word}
+  .key.dim .no{color:var(--muted)}
+  .key .who{font-weight:600}
+  .key .meta{color:var(--muted);font-size:.85rem}
+  .key .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .badge{display:inline-block;font-size:.75rem;padding:1px 9px;border-radius:99px;border:1px solid currentColor;margin-left:8px;vertical-align:1px}
+  .s-active{color:var(--ok)} .s-revoked{color:var(--err)} .s-other{color:var(--muted)}
+  .logs{grid-column:2 / -1;margin-top:8px;font-size:.85rem;background:var(--bg);border-radius:8px;padding:10px 12px}
+  .logs table{width:100%;border-collapse:collapse}
+  .logs td,.logs th{text-align:left;padding:3px 8px 3px 0;font-weight:400}
+  .logs th{color:var(--muted)}
+  .empty{padding:36px 20px;text-align:center;color:var(--muted)}
+  .empty strong{display:block;font:400 1.15rem var(--serif);color:var(--text);margin-bottom:4px}
+
+  #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--card-2);border:1px solid var(--gold);
+    color:var(--text);padding:9px 18px;border-radius:99px;font-size:.9rem;opacity:0;transition:opacity .2s;pointer-events:none}
+  #toast.show{opacity:1}
+
+  @media (max-width:860px){
+    main{grid-template-columns:1fr}
+  }
+  @media (max-width:520px){
+    header{padding-top:20px}
+    .brand h1{font-size:1.2rem}
+    .row2{grid-template-columns:minmax(0,1fr)}
+    .list-head{flex-wrap:wrap;align-items:start}
+    .key{grid-template-columns:56px 1fr;padding:14px}
+    .key .acts{grid-column:1 / -1;justify-content:flex-start}
+    .logs{grid-column:1 / -1}
+    .keycard .room{font-size:2.4rem}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .keycard{animation:none}
+    #toast{transition:none}
+  }
 </style>
 </head>
 <body>
-<h2>Crear link de apertura</h2>
-<label>API key <input id="key" type="password"></label>
-<label>Cerradura <select id="lock"></select></label>
-<div class="row">
-  <div><label>Huésped <input id="guest"></label></div>
-  <div><label>Habitación <input id="room"></label></div>
-  <div><label>Desde <input id="from" type="datetime-local"></label></div>
-  <div><label>Hasta <input id="to" type="datetime-local"></label></div>
-  <div><label>Máx. aperturas (0 = sin límite) <input id="max" type="number" value="0"></label></div>
-  <div><label>Usuario TTLock para eKey (opcional) <input id="recv" placeholder="email o móvil"></label></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="ico-key" viewBox="0 0 32 32"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="10" cy="16" r="6"/><circle cx="10" cy="16" r="2"/><path d="M16 16h13M24 16v4M28 16v3"/></g></symbol>
+</svg>
+
+<!-- ---------- entrada ---------- -->
+<div id="login" hidden>
+  <span class="hotel js-hotel">Visa Hotel</span>
+  <h2>Llaves digitales</h2>
+  <p>Ingrese la clave de recepción para continuar.</p>
+  <form id="loginForm">
+    <label for="key">Clave de recepción</label>
+    <input id="key" type="password" autocomplete="current-password" required>
+    <div class="err-text" id="loginErr" role="alert"></div>
+    <button class="primary" type="submit">Entrar</button>
+  </form>
 </div>
-<button id="go">Crear link</button> <button id="reload">Cargar cerraduras / links</button>
-<div id="out"></div>
-<table><thead><tr><th>ID</th><th>Huésped</th><th>Estado</th><th>Usos</th><th>Link</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+
+<!-- ---------- panel ---------- -->
+<div id="app" hidden>
+  <header>
+    <div class="brand">
+      <svg width="38" height="38" aria-hidden="true"><use href="#ico-key"/></svg>
+      <div>
+        <div class="hotel js-hotel">Visa Hotel</div>
+        <h1>Llaves digitales de recepción</h1>
+      </div>
+    </div>
+    <button class="ghost small" id="logout">Salir</button>
+  </header>
+
+  <main>
+    <section aria-labelledby="newTitle">
+      <h2 id="newTitle">Nueva llave</h2>
+      <p class="sub">El huésped recibe un link para abrir su puerta desde el teléfono.</p>
+      <form class="panel" id="newForm" novalidate>
+        <label for="lock">Cerradura</label>
+        <select id="lock" required></select>
+        <div class="hint" id="lockHint"></div>
+        <div class="row2">
+          <div><label for="guest">Huésped</label><input id="guest" required autocomplete="off"></div>
+          <div><label for="room">Habitación</label><input id="room" autocomplete="off"></div>
+          <div><label for="from">Llegada</label><input id="from" type="datetime-local" required></div>
+          <div><label for="to">Salida</label><input id="to" type="datetime-local" required></div>
+        </div>
+        <label for="max">Límite de aperturas</label>
+        <input id="max" type="number" min="0" value="0" inputmode="numeric">
+        <div class="hint">0 = sin límite durante la estadía.</div>
+        <details>
+          <summary>Opciones avanzadas</summary>
+          <label for="recv">Enviar además una eKey TTLock a</label>
+          <input id="recv" placeholder="email o teléfono de la cuenta TTLock" autocomplete="off">
+          <div class="hint">Opcional. Solo si el huésped usa la app TTLock.</div>
+        </details>
+        <div class="err-text" id="newErr" role="alert"></div>
+        <button class="primary" id="create" type="submit">Crear llave</button>
+      </form>
+      <div id="issued" aria-live="polite"></div>
+    </section>
+
+    <section aria-labelledby="listTitle">
+      <div class="list-head">
+        <div>
+          <h2 id="listTitle">Llaves emitidas</h2>
+          <p class="sub" id="count"></p>
+        </div>
+        <div class="seg" role="group" aria-label="Filtrar llaves">
+          <button type="button" data-f="active" aria-pressed="true">Vigentes</button>
+          <button type="button" data-f="all" aria-pressed="false">Todas</button>
+        </div>
+      </div>
+      <ul class="keys" id="keys"></ul>
+    </section>
+  </main>
+</div>
+
+<div id="toast" role="status"></div>
+
 <script>
-const $=id=>document.getElementById(id);
-const api=(p,o={})=>fetch(p,{...o,headers:{'X-API-Key':$('key').value,'Content-Type':'application/json'}}).then(async r=>{const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.status);return j});
-async function load(){
-  try{
-    const locks=await api('/api/locks');
-    $('lock').innerHTML=locks.map(l=>`<option value="${l.lockId}">${l.lockAlias||l.lockName} (${l.lockId})</option>`).join('');
-    const acc=await api('/api/accesses');
-    $('rows').innerHTML=acc.map(a=>`<tr><td>${a.id}</td><td>${a.guest_name}</td><td>${a.state}</td><td>${a.unlock_count}</td><td><a href="${a.url}" target="_blank">abrir</a></td><td><button onclick="rev(${a.id})">Revocar</button></td></tr>`).join('');
-  }catch(e){$('out').textContent='Error: '+e.message}
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const HOTEL = 'Visa Hotel';
+const STATE = {active:['Vigente','s-active'],not_started:['Por iniciar','s-other'],expired:['Vencida','s-other'],
+               exhausted:['Agotada','s-other'],revoked:['Revocada','s-revoked']};
+
+// El backend devuelve fechas UTC sin zona; se interpretan como UTC.
+const parse = d => new Date(/Z$|[+-]\d\d:?\d\d$/.test(d) ? d : d + 'Z');
+const fmt = d => parse(d).toLocaleString('es', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
+const localInput = dt => { const p = n => String(n).padStart(2,'0');
+  return `${dt.getFullYear()}-${p(dt.getMonth()+1)}-${p(dt.getDate())}T${p(dt.getHours())}:${p(dt.getMinutes())}`; };
+
+let apiKey = '', locks = [], accesses = [], filter = 'active';
+try { apiKey = sessionStorage.getItem('ttlink_key') || ''; } catch (e) {}
+
+class AuthError extends Error {}
+async function api(path, opts = {}) {
+  const r = await fetch(path, {...opts, headers: {'X-API-Key': apiKey, 'Content-Type': 'application/json'}});
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401) throw new AuthError();
+  if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Error ' + r.status);
+  return j;
 }
-async function rev(id){await api('/api/accesses/'+id,{method:'DELETE'});load()}
-$('reload').onclick=load;
-$('go').onclick=async()=>{
-  try{
-    const a=await api('/api/accesses',{method:'POST',body:JSON.stringify({
-      lock_id:+$('lock').value,guest_name:$('guest').value,room_label:$('room').value,
-      valid_from:new Date($('from').value).toISOString(),valid_to:new Date($('to').value).toISOString(),
-      max_unlocks:+$('max').value,receiver_username:$('recv').value||null})});
-    $('out').textContent=a.url;load();
-  }catch(e){$('out').textContent='Error: '+e.message}
+
+function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('show');
+  clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('show'), 2200); }
+
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); ta.remove(); }
+  toast('Link copiado');
+}
+const waLink = a => 'https://wa.me/?text=' + encodeURIComponent(
+  `Bienvenido a ${HOTEL}${a.room_label ? ', habitación ' + a.room_label : ''}. ` +
+  `Su llave digital, válida del ${fmt(a.valid_from)} al ${fmt(a.valid_to)}: ${a.url}`);
+
+// ---------- sesión ----------
+function showLogin(msg) {
+  apiKey = ''; try { sessionStorage.removeItem('ttlink_key'); } catch (e) {}
+  $('app').hidden = true; $('login').hidden = false; $('loginErr').textContent = msg || '';
+  $('key').value = ''; $('key').focus();
+}
+async function enter() {
+  try {
+    [locks, accesses] = await Promise.all([api('/api/locks'), api('/api/accesses')]);
+  } catch (e) {
+    showLogin(e instanceof AuthError ? 'Clave incorrecta. Revise e intente de nuevo.' : 'No se pudo conectar: ' + e.message);
+    return;
+  }
+  $('login').hidden = true; $('app').hidden = false;
+  renderLocks(); renderKeys();
+}
+$('loginForm').onsubmit = e => {
+  e.preventDefault(); apiKey = $('key').value.trim();
+  try { sessionStorage.setItem('ttlink_key', apiKey); } catch (e) {}
+  enter();
 };
+$('logout').onclick = () => showLogin();
+function handle(e, target) {
+  if (e instanceof AuthError) return showLogin('La sesión expiró. Ingrese la clave de nuevo.');
+  $(target).textContent = e.message;
+}
+
+// ---------- cerraduras ----------
+const lockName = id => { const l = locks.find(l => l.lockId === id); return l ? (l.lockAlias || l.lockName) : 'Cerradura ' + id; };
+function renderLocks() {
+  const byName = (a, b) => (a.lockAlias || a.lockName).localeCompare(b.lockAlias || b.lockName);
+  const gw = locks.filter(l => l.hasGateway === 1).sort(byName);
+  const no = locks.filter(l => l.hasGateway !== 1).sort(byName);
+  const opt = (l, warn) => `<option value="${l.lockId}">${esc(l.lockAlias || l.lockName)}${warn ? ' — sin gateway' : ''}</option>`;
+  $('lock').innerHTML =
+    (gw.length ? `<optgroup label="Con apertura remota">${gw.map(l => opt(l)).join('')}</optgroup>` : '') +
+    (no.length ? `<optgroup label="Sin gateway (no abren por link)">${no.map(l => opt(l, true)).join('')}</optgroup>` : '');
+  lockHint();
+}
+function lockHint() {
+  const l = locks.find(l => l.lockId === +$('lock').value);
+  $('lockHint').textContent = l && l.hasGateway !== 1
+    ? 'Esta cerradura no tiene gateway: el link no podrá abrirla.' : '';
+  $('lockHint').style.color = 'var(--err)';
+}
+$('lock').onchange = lockHint;
+
+// ---------- nueva llave ----------
+function resetDates() {
+  const a = new Date(); a.setHours(15, 0, 0, 0);
+  const b = new Date(a); b.setDate(b.getDate() + 1); b.setHours(12, 0, 0, 0);
+  $('from').value = localInput(a); $('to').value = localInput(b);
+}
+resetDates();
+
+$('newForm').onsubmit = async e => {
+  e.preventDefault(); $('newErr').textContent = '';
+  const from = new Date($('from').value), to = new Date($('to').value);
+  if (!$('guest').value.trim()) return $('newErr').textContent = 'Escriba el nombre del huésped.';
+  if (isNaN(from) || isNaN(to)) return $('newErr').textContent = 'Indique fecha de llegada y de salida.';
+  if (to <= from) return $('newErr').textContent = 'La salida debe ser posterior a la llegada.';
+  const btn = $('create'); btn.disabled = true; btn.textContent = 'Creando…';
+  try {
+    const a = await api('/api/accesses', {method: 'POST', body: JSON.stringify({
+      lock_id: +$('lock').value, guest_name: $('guest').value.trim(), room_label: $('room').value.trim(),
+      valid_from: from.toISOString(), valid_to: to.toISOString(),
+      max_unlocks: Math.max(0, +$('max').value || 0), receiver_username: $('recv').value.trim() || null})});
+    accesses.unshift(a); renderKeys(); renderIssued(a);
+    $('guest').value = ''; $('room').value = ''; $('recv').value = ''; $('max').value = 0; resetDates();
+  } catch (err) { handle(err, 'newErr'); }
+  finally { btn.disabled = false; btn.textContent = 'Crear llave'; }
+};
+
+function renderIssued(a) {
+  $('issued').innerHTML = `
+    <div class="keycard">
+      <div class="hotel">${esc(HOTEL)}</div>
+      <div class="room">${esc(a.room_label || lockName(a.lock_id))}</div>
+      <div class="guest">${esc(a.guest_name)}</div>
+      <div class="dates">Del ${esc(fmt(a.valid_from))} al ${esc(fmt(a.valid_to))}${a.max_unlocks ? ', ' + a.max_unlocks + ' aperturas' : ''}</div>
+      <div class="url">${esc(a.url)}</div>
+      <div class="actions">
+        <button class="primary small" type="button" id="kcCopy">Copiar link</button>
+        <a class="btn small" id="kcWa" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+      </div>
+    </div>`;
+  $('kcCopy').onclick = () => copy(a.url);
+  $('kcWa').href = waLink(a);
+}
+
+// ---------- casillero ----------
+document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
+  filter = b.dataset.f;
+  document.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  renderKeys();
+});
+
+function renderKeys() {
+  const shown = filter === 'active' ? accesses.filter(a => a.state === 'active' || a.state === 'not_started') : accesses;
+  const vig = accesses.filter(a => a.state === 'active').length;
+  $('count').textContent = `${vig} ${vig === 1 ? 'llave vigente' : 'llaves vigentes'} de ${accesses.length} emitidas`;
+  if (!shown.length) {
+    $('keys').innerHTML = `<li class="empty"><strong>No hay llaves ${filter === 'active' ? 'vigentes' : 'emitidas'}</strong>
+      Cree una con el formulario y envíe el link al huésped.</li>`;
+    return;
+  }
+  $('keys').innerHTML = shown.map(a => {
+    const [label, cls] = STATE[a.state] || [a.state, 's-other'];
+    const live = a.state === 'active' || a.state === 'not_started';
+    return `<li class="key${live ? '' : ' dim'}" data-id="${a.id}">
+      <div class="no" title="Habitación">${esc(a.room_label || '—')}</div>
+      <div>
+        <div class="who">${esc(a.guest_name)}<span class="badge ${cls}">${label}</span></div>
+        <div class="meta">${esc(lockName(a.lock_id))}. Del ${esc(fmt(a.valid_from))} al ${esc(fmt(a.valid_to))}.
+          ${a.unlock_count} ${a.unlock_count === 1 ? 'apertura' : 'aperturas'}${a.max_unlocks ? ' de ' + a.max_unlocks : ''}.</div>
+      </div>
+      <div class="acts">
+        ${live ? `<button class="small" data-act="copy">Copiar link</button>` : ''}
+        <button class="small ghost" data-act="logs" aria-expanded="false">Aperturas</button>
+        ${a.state !== 'revoked' ? `<button class="small ghost danger" data-act="revoke">Revocar</button>` : ''}
+      </div>
+    </li>`;
+  }).join('');
+}
+
+$('keys').onclick = async e => {
+  const btn = e.target.closest('button[data-act]'); if (!btn) return;
+  const li = btn.closest('.key'), id = +li.dataset.id, a = accesses.find(x => x.id === id);
+  if (btn.dataset.act === 'copy') return copy(a.url);
+  if (btn.dataset.act === 'revoke') {
+    if (!confirm(`¿Revocar la llave de ${a.guest_name}${a.room_label ? ' (hab. ' + a.room_label + ')' : ''}? El link dejará de abrir la puerta.`)) return;
+    btn.disabled = true;
+    try { Object.assign(a, await api('/api/accesses/' + id, {method: 'DELETE'})); renderKeys(); toast('Llave revocada'); }
+    catch (err) { if (err instanceof AuthError) return showLogin('La sesión expiró. Ingrese la clave de nuevo.'); toast(err.message); btn.disabled = false; }
+    return;
+  }
+  if (btn.dataset.act === 'logs') {
+    const open = li.querySelector('.logs');
+    if (open) { open.remove(); btn.setAttribute('aria-expanded', 'false'); return; }
+    btn.setAttribute('aria-expanded', 'true');
+    const box = document.createElement('div'); box.className = 'logs'; box.textContent = 'Cargando…'; li.appendChild(box);
+    try {
+      const rows = await api(`/api/accesses/${id}/logs`);
+      box.innerHTML = rows.length
+        ? `<table><thead><tr><th>Fecha</th><th>Resultado</th><th>IP</th></tr></thead><tbody>${rows.map(r =>
+            `<tr><td>${esc(fmt(r.ts))}</td><td class="${r.ok ? 's-active' : 's-revoked'}">${r.ok ? 'Abrió' : 'Falló (' + esc(r.errcode) + ')'}</td><td>${esc(r.ip)}</td></tr>`).join('')}</tbody></table>`
+        : 'Este link todavía no se ha usado.';
+    } catch (err) { if (err instanceof AuthError) return showLogin('La sesión expiró. Ingrese la clave de nuevo.'); box.textContent = err.message; }
+  }
+};
+
+if (apiKey) enter(); else showLogin();
 </script>
 </body>
 </html>
