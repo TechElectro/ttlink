@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     hotel_name: str = "Hotel"
     database_url: str = "sqlite:///./ttlink.db"
     unlock_min_interval_s: int = 5
+    # True si el lector entrega el número de tarjeta con los bytes invertidos
+    ttlock_card_reversed: bool = False
 
 
 settings = Settings()

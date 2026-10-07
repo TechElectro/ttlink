@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -60,12 +60,56 @@ class AccessIn(BaseModel):
     valid_to: datetime
     max_unlocks: int = 0
     receiver_username: str | None = None  # si viene, se envía eKey remota
+    card_number: str | None = None  # si viene, se registra la tarjeta RFID por gateway
+
+    @field_validator("card_number")
+    @classmethod
+    def _card(cls, v: str | None) -> str | None:
+        # El lector USB escribe como teclado: puede traer espacios o Enter
+        v = "".join((v or "").split())
+        if not v:
+            return None
+        if not v.isdigit() or not 4 <= len(v) <= 20:
+            raise ValueError("Número de tarjeta no válido")
+        return v
+
+
+def _card_error(e: TTLockError) -> str:
+    return ERRORS.get(e.errcode, f"TTLock no pudo registrar la tarjeta: {e.errmsg} ({e.errcode})")
+
+
+def _free_card(db: Session, lock_id: int, number: str) -> None:
+    """Deja la tarjeta lista para asignarse: falla si la usa una estadía vigente o si
+    fue registrada fuera de TTLINK (p. ej. tarjeta de personal), y la borra de la
+    cerradura solo si quedó de una estadía nuestra ya vencida/revocada."""
+    live = ("active", "not_started")
+    for other in db.scalars(select(Access).where(Access.lock_id == lock_id, Access.card_number == number)):
+        if link_state(other) in live:
+            raise HTTPException(409, _card_taken(other))
+    try:
+        stale = [c for c in client.list_cards(lock_id) if c.get("cardNumber") == number]
+        for c in stale:
+            owner = db.scalar(select(Access).where(Access.card_id == c["cardId"]))
+            if not owner:
+                raise HTTPException(409, f"Esta tarjeta ya está registrada en la cerradura fuera del sistema "
+                                         f"(\"{c.get('cardName') or c['cardId']}\"). Use otra tarjeta o bórrela "
+                                         f"desde la app TTLock.")
+            if link_state(owner) in live:
+                raise HTTPException(409, _card_taken(owner))
+            client.delete_card(lock_id, c["cardId"])
+    except TTLockError as e:
+        raise HTTPException(502, _card_error(e))
+
+
+def _card_taken(a: Access) -> str:
+    return f"Esta tarjeta ya está asignada a {a.guest_name}" + (f", hab. {a.room_label}" if a.room_label else "") + "."
 
 
 def _out(a: Access) -> dict:
     return {
         "id": a.id, "url": f"{settings.public_base_url}/o/{a.token}", "lock_id": a.lock_id,
         "guest_name": a.guest_name, "room_label": a.room_label, "ekey_id": a.ekey_id,
+        "card_number": a.card_number,
         "valid_from": a.valid_from, "valid_to": a.valid_to, "max_unlocks": a.max_unlocks,
         "unlock_count": a.unlock_count, "state": link_state(a),
     }
@@ -80,6 +124,15 @@ def create_access(body: AccessIn, db: Session = Depends(get_db)):
         room_label=body.room_label, valid_from=body.valid_from, valid_to=body.valid_to,
         max_unlocks=body.max_unlocks,
     )
+    if body.card_number:
+        _free_card(db, body.lock_id, body.card_number)
+        name = body.guest_name + (f" hab. {body.room_label}" if body.room_label else "")
+        try:
+            a.card_id = client.add_card(body.lock_id, body.card_number, name[:50],
+                                        _ms(body.valid_from), _ms(body.valid_to))
+        except TTLockError as e:
+            raise HTTPException(502, _card_error(e))
+        a.card_number = body.card_number
     if body.receiver_username:
         try:
             a.ekey_id = client.send_ekey(
@@ -87,6 +140,12 @@ def create_access(body: AccessIn, db: Session = Depends(get_db)):
                 _ms(body.valid_from), _ms(body.valid_to),
             )
         except TTLockError as e:
+            # No dejar en la cerradura una tarjeta de una llave que no se guardó
+            if a.card_id:
+                try:
+                    client.delete_card(body.lock_id, a.card_id)
+                except TTLockError:
+                    pass
             raise HTTPException(502, str(e))
     db.add(a)
     db.commit()
@@ -103,6 +162,17 @@ def revoke_access(access_id: int, db: Session = Depends(get_db)):
     a = db.get(Access, access_id)
     if not a:
         raise HTTPException(404)
+    if a.card_id:
+        try:
+            client.delete_card(a.lock_id, a.card_id)
+        except TTLockError as e:
+            # Si ya no está en la cerradura (borrada a mano), se puede seguir
+            try:
+                still = any(c.get("cardId") == a.card_id for c in client.list_cards(a.lock_id))
+            except TTLockError:
+                still = True
+            if still:
+                raise HTTPException(502, _card_error(e))
     if a.ekey_id:
         try:
             client.delete_ekey(a.ekey_id)

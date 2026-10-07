@@ -76,6 +76,24 @@ class TTLockClient:
     def delete_ekey(self, key_id: int) -> None:
         self._call("/v3/key/delete", keyId=key_id)
 
+    def add_card(self, lock_id: int, number: str, name: str, start_ms: int, end_ms: int) -> int:
+        path = "/v3/identityCard/addForReversedCardNumber" if settings.ttlock_card_reversed else "/v3/identityCard/add"
+        data = self._call(path, lockId=lock_id, cardNumber=number, cardName=name,
+                          startDate=start_ms, endDate=end_ms, addType=2)
+        return data["cardId"]
+
+    def delete_card(self, lock_id: int, card_id: int) -> None:
+        self._call("/v3/identityCard/delete", lockId=lock_id, cardId=card_id, deleteType=2)
+
+    def list_cards(self, lock_id: int) -> list[dict]:
+        cards, page = [], 1
+        while True:
+            data = self._call("/v3/identityCard/list", lockId=lock_id, pageNo=page, pageSize=100)
+            cards += data.get("list", [])
+            if page >= data.get("pages", 1):
+                return cards
+            page += 1
+
     def remote_unlock(self, lock_id: int) -> None:
         self._call("/v3/lock/unlock", lockId=lock_id)
 

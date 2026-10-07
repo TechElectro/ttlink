@@ -21,6 +21,8 @@ class Access(Base):
     guest_contact: Mapped[str] = mapped_column(String(120), default="")
     room_label: Mapped[str] = mapped_column(String(60), default="")
     ekey_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    card_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    card_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     valid_to: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     max_unlocks: Mapped[int] = mapped_column(Integer, default=0)  # 0 = sin límite

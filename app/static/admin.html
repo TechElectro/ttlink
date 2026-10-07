@@ -77,6 +77,7 @@
   .keycard .room{font:400 3rem/1 var(--serif);color:var(--gold);margin:14px 0 4px}
   .keycard .guest{font:400 1.1rem var(--serif)}
   .keycard .dates{color:var(--muted);font-size:.85rem;margin-top:6px}
+  .keycard .rfid{display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:.85rem;color:var(--gold)}
   .keycard .url{margin-top:14px;font-size:.78rem;color:var(--muted);word-break:break-all}
   .keycard .actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;position:relative;z-index:1}
   @keyframes issue{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
@@ -129,6 +130,8 @@
 <body>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="ico-card" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+    <rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10.5a3 3 0 0 1 0 3M9.5 9a5.5 5.5 0 0 1 0 6"/></g></symbol>
   <symbol id="ico-key" viewBox="0 0 32 32"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="10" cy="16" r="6"/><circle cx="10" cy="16" r="2"/><path d="M16 16h13M24 16v4M28 16v3"/></g></symbol>
 </svg>
@@ -173,7 +176,10 @@
           <div><label for="from">Llegada</label><input id="from" type="datetime-local" required></div>
           <div><label for="to">Salida</label><input id="to" type="datetime-local" required></div>
         </div>
-        <label for="max">Límite de aperturas</label>
+        <label for="card">Tarjeta RFID (opcional)</label>
+        <input id="card" inputmode="numeric" autocomplete="off" placeholder="Pase la tarjeta por el lector">
+        <div class="hint" id="cardHint">Se registra en la cerradura y abre solo durante la estadía.</div>
+        <label for="max">Límite de aperturas del link</label>
         <input id="max" type="number" min="0" value="0" inputmode="numeric">
         <div class="hint">0 = sin límite durante la estadía.</div>
         <details>
@@ -227,7 +233,8 @@ async function api(path, opts = {}) {
   const r = await fetch(path, {...opts, headers: {'X-API-Key': apiKey, 'Content-Type': 'application/json'}});
   const j = await r.json().catch(() => ({}));
   if (r.status === 401) throw new AuthError();
-  if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Error ' + r.status);
+  if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail
+    : Array.isArray(j.detail) && j.detail[0]?.msg ? j.detail[0].msg.replace(/^Value error, /, '') : 'Error ' + r.status);
   return j;
 }
 
@@ -285,11 +292,18 @@ function renderLocks() {
 }
 function lockHint() {
   const l = locks.find(l => l.lockId === +$('lock').value);
+  const gw = !!l && l.hasGateway === 1;
+  $('card').disabled = !gw;
+  if (!gw) $('card').value = '';
+  $('cardHint').textContent = gw ? 'Se registra en la cerradura y abre solo durante la estadía.'
+    : 'Esta cerradura no tiene gateway: no puede registrar tarjetas.';
   $('lockHint').textContent = l && l.hasGateway !== 1
     ? 'Esta cerradura no tiene gateway: el link no podrá abrirla.' : '';
   $('lockHint').style.color = 'var(--err)';
 }
 $('lock').onchange = lockHint;
+// El lector USB escribe el número y termina con Enter: no enviar, pasar al botón
+$('card').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('create').focus(); } };
 
 // ---------- nueva llave ----------
 function resetDates() {
@@ -305,14 +319,18 @@ $('newForm').onsubmit = async e => {
   if (!$('guest').value.trim()) return $('newErr').textContent = 'Escriba el nombre del huésped.';
   if (isNaN(from) || isNaN(to)) return $('newErr').textContent = 'Indique fecha de llegada y de salida.';
   if (to <= from) return $('newErr').textContent = 'La salida debe ser posterior a la llegada.';
-  const btn = $('create'); btn.disabled = true; btn.textContent = 'Creando…';
+  const card = $('card').value.replace(/\s+/g, '');
+  if (card && !/^\d{4,20}$/.test(card)) return $('newErr').textContent = 'El número de tarjeta debe tener solo dígitos.';
+  const btn = $('create'); btn.disabled = true;
+  btn.textContent = card ? 'Registrando tarjeta en la cerradura…' : 'Creando…';
   try {
     const a = await api('/api/accesses', {method: 'POST', body: JSON.stringify({
       lock_id: +$('lock').value, guest_name: $('guest').value.trim(), room_label: $('room').value.trim(),
       valid_from: from.toISOString(), valid_to: to.toISOString(),
-      max_unlocks: Math.max(0, +$('max').value || 0), receiver_username: $('recv').value.trim() || null})});
+      max_unlocks: Math.max(0, +$('max').value || 0), receiver_username: $('recv').value.trim() || null,
+      card_number: card || null})});
     accesses.unshift(a); renderKeys(); renderIssued(a);
-    $('guest').value = ''; $('room').value = ''; $('recv').value = ''; $('max').value = 0; resetDates();
+    $('guest').value = ''; $('room').value = ''; $('recv').value = ''; $('card').value = ''; $('max').value = 0; resetDates();
   } catch (err) { handle(err, 'newErr'); }
   finally { btn.disabled = false; btn.textContent = 'Crear llave'; }
 };
@@ -324,6 +342,7 @@ function renderIssued(a) {
       <div class="room">${esc(a.room_label || lockName(a.lock_id))}</div>
       <div class="guest">${esc(a.guest_name)}</div>
       <div class="dates">Del ${esc(fmt(a.valid_from))} al ${esc(fmt(a.valid_to))}${a.max_unlocks ? ', ' + a.max_unlocks + ' aperturas' : ''}</div>
+      ${a.card_number ? `<div class="rfid"><svg width="18" height="18" aria-hidden="true"><use href="#ico-card"/></svg>Tarjeta registrada, termina en ${esc(a.card_number.slice(-4))}</div>` : ''}
       <div class="url">${esc(a.url)}</div>
       <div class="actions">
         <button class="primary small" type="button" id="kcCopy">Copiar link</button>
@@ -358,7 +377,7 @@ function renderKeys() {
       <div>
         <div class="who">${esc(a.guest_name)}<span class="badge ${cls}">${label}</span></div>
         <div class="meta">${esc(lockName(a.lock_id))}. Del ${esc(fmt(a.valid_from))} al ${esc(fmt(a.valid_to))}.
-          ${a.unlock_count} ${a.unlock_count === 1 ? 'apertura' : 'aperturas'}${a.max_unlocks ? ' de ' + a.max_unlocks : ''}.</div>
+          ${a.unlock_count} ${a.unlock_count === 1 ? 'apertura' : 'aperturas'} por link${a.max_unlocks ? ' de ' + a.max_unlocks : ''}.${a.card_number ? ' <span style="white-space:nowrap">Tarjeta …' + esc(a.card_number.slice(-4)) + '.</span>' : ''}</div>
       </div>
       <div class="acts">
         ${live ? `<button class="small" data-act="copy">Copiar link</button>` : ''}
@@ -374,7 +393,7 @@ $('keys').onclick = async e => {
   const li = btn.closest('.key'), id = +li.dataset.id, a = accesses.find(x => x.id === id);
   if (btn.dataset.act === 'copy') return copy(a.url);
   if (btn.dataset.act === 'revoke') {
-    if (!confirm(`¿Revocar la llave de ${a.guest_name}${a.room_label ? ' (hab. ' + a.room_label + ')' : ''}? El link dejará de abrir la puerta.`)) return;
+    if (!confirm(`¿Revocar la llave de ${a.guest_name}${a.room_label ? ' (hab. ' + a.room_label + ')' : ''}? El link dejará de abrir la puerta${a.card_number ? ' y la tarjeta …' + a.card_number.slice(-4) + ' se borrará de la cerradura' : ''}.`)) return;
     btn.disabled = true;
     try { Object.assign(a, await api('/api/accesses/' + id, {method: 'DELETE'})); renderKeys(); toast('Llave revocada'); }
     catch (err) { if (err instanceof AuthError) return showLogin('La sesión expiró. Ingrese la clave de nuevo.'); toast(err.message); btn.disabled = false; }
