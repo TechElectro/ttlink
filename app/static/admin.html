@@ -44,6 +44,12 @@
   input:focus,select:focus{outline:none;border-color:var(--gold)}
   .hint{font-size:.8rem;color:var(--muted);margin-top:4px}
   .err-text{color:var(--err);font-size:.9rem;min-height:1.3em;margin-top:10px}
+  .reader{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.85rem;color:var(--muted);margin-top:8px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+  .dot.on{background:var(--ok)}
+  .hint.ok{color:var(--ok)} .hint.bad{color:var(--err)}
+  input.flash{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
+  input{transition:box-shadow .3s,border-color .3s}
 
   /* ---------- login ---------- */
   #login{max-width:380px;margin:12vh auto 0;padding:0 16px;text-align:center}
@@ -124,6 +130,7 @@
   @media (prefers-reduced-motion:reduce){
     .keycard{animation:none}
     #toast{transition:none}
+    input{transition:none}
   }
 </style>
 </head>
@@ -177,7 +184,12 @@
           <div><label for="to">Salida</label><input id="to" type="datetime-local" required></div>
         </div>
         <label for="card">Tarjeta RFID (opcional)</label>
-        <input id="card" inputmode="numeric" autocomplete="off" placeholder="Pase la tarjeta por el lector">
+        <input id="card" inputmode="numeric" autocomplete="off" placeholder="Número de tarjeta">
+        <div class="reader" id="reader" hidden>
+          <span class="dot" id="readerDot"></span><span id="readerState">Lector no conectado</span>
+          <button type="button" class="small ghost" id="readerBtn">Conectar lector</button>
+        </div>
+        <div class="hint" id="cardRead" role="status"></div>
         <div class="hint" id="cardHint">Se registra en la cerradura y abre solo durante la estadía.</div>
         <label for="max">Límite de aperturas del link</label>
         <input id="max" type="number" min="0" value="0" inputmode="numeric">
@@ -265,7 +277,7 @@ async function enter() {
     return;
   }
   $('login').hidden = true; $('app').hidden = false;
-  renderLocks(); renderKeys();
+  renderLocks(); renderKeys(); initReader();
 }
 $('loginForm').onsubmit = e => {
   e.preventDefault(); apiKey = $('key').value.trim();
@@ -294,14 +306,14 @@ function lockHint() {
   const l = locks.find(l => l.lockId === +$('lock').value);
   const gw = !!l && l.hasGateway === 1;
   $('card').disabled = !gw;
-  if (!gw) $('card').value = '';
+  if (!gw) { $('card').value = ''; cardMsg(''); }
   $('cardHint').textContent = gw ? 'Se registra en la cerradura y abre solo durante la estadía.'
     : 'Esta cerradura no tiene gateway: no puede registrar tarjetas.';
   $('lockHint').textContent = l && l.hasGateway !== 1
     ? 'Esta cerradura no tiene gateway: el link no podrá abrirla.' : '';
   $('lockHint').style.color = 'var(--err)';
 }
-$('lock').onchange = lockHint;
+$('lock').onchange = () => { if (!$('card').value) cardMsg(''); lockHint(); };
 // El lector USB escribe el número y termina con Enter: no enviar, pasar al botón
 $('card').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('create').focus(); } };
 
@@ -330,7 +342,7 @@ $('newForm').onsubmit = async e => {
       max_unlocks: Math.max(0, +$('max').value || 0), receiver_username: $('recv').value.trim() || null,
       card_number: card || null})});
     accesses.unshift(a); renderKeys(); renderIssued(a);
-    $('guest').value = ''; $('room').value = ''; $('recv').value = ''; $('card').value = ''; $('max').value = 0; resetDates();
+    $('guest').value = ''; $('room').value = ''; $('recv').value = ''; $('card').value = ''; cardMsg(''); $('max').value = 0; resetDates();
   } catch (err) { handle(err, 'newErr'); }
   finally { btn.disabled = false; btn.textContent = 'Crear llave'; }
 };
@@ -413,6 +425,101 @@ $('keys').onclick = async e => {
     } catch (err) { if (err instanceof AuthError) return showLogin('La sesión expiró. Ingrese la clave de nuevo.'); box.textContent = err.message; }
   }
 };
+
+// ---------- lector MR-11U (WebHID) ----------
+// Protocolo de github.com/TechElectro/lector-mr11u (leer_tarjeta.html): reporte de 64 bytes
+// con 00 01 20 [dirección, largo, comando]; con tarjeta responde 01 00 01 <UID x4>.
+const RD = {VID: 0xD808, PID: 0x0201, CMD: [0x00, 0x01, 0x20], TIMEOUT: 1000, POLL: 150};
+const hid = 'hid' in navigator ? navigator.hid : null;
+let reader = null, polling = false, onReader = null, readerReady = false;
+
+// = int.from_bytes(uid, "little") de uid_teclado.py: el número que se registra con
+// TTLOCK_CARD_REVERSED=true (la cerradura lo guarda con los bytes invertidos).
+const uidDecInv = uid => String([...uid].reverse().reduce((n, b) => n * 256 + b, 0));
+const uidHex = uid => [...uid].map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+const pause = ms => new Promise(r => setTimeout(r, ms));
+
+function cardMsg(t, cls) { $('cardRead').textContent = t || ''; $('cardRead').className = 'hint ' + (cls || ''); }
+
+function readerState() {
+  const on = !!(reader && reader.opened);
+  $('readerDot').classList.toggle('on', on);
+  $('readerState').textContent = on ? 'Lector conectado' : 'Lector no conectado';
+  $('readerBtn').hidden = on;
+  $('card').placeholder = on ? 'Acerque la tarjeta al lector' : 'Número de tarjeta';
+}
+
+async function openReader(d) {
+  try { if (!d.opened) await d.open(); }
+  catch (e) {
+    reader = null; readerState();
+    cardMsg('El lector está en uso por otro programa (cierre uid_teclado.py) o no responde.', 'bad');
+    return;
+  }
+  reader = d; readerState(); pollReader();
+}
+
+// Envía el comando y espera el siguiente reporte de entrada (64 bytes).
+function transaccion(payload) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => { reader.removeEventListener('inputreport', got); resolve(null); }, RD.TIMEOUT);
+    function got(e) { clearTimeout(t); reader.removeEventListener('inputreport', got); resolve(new Uint8Array(e.data.buffer)); }
+    reader.addEventListener('inputreport', got);
+    const data = new Uint8Array(64); data.set(payload);
+    reader.sendReport(0, data).catch(err => { clearTimeout(t); reader.removeEventListener('inputreport', got); reject(err); });
+  });
+}
+const extraerUid = r => r && r.length >= 7 && r[0] === 0x01 && r[1] === 0x00 && r[2] === 0x01 ? r.slice(3, 7) : null;
+
+// Consulta solo con el panel visible y la sesión abierta, para no ocupar el lector en segundo plano.
+const canPoll = () => reader && reader.opened && !document.hidden && !$('app').hidden;
+async function pollReader() {
+  if (polling || !canPoll()) return;
+  polling = true;
+  try {
+    while (canPoll()) {
+      let uid;
+      try { uid = extraerUid(await transaccion(RD.CMD)); }
+      catch (e) { cardMsg('Error del lector: ' + e.message, 'bad'); break; }
+      const key = uid ? uidHex(uid) : null;
+      if (key && key !== onReader) cardRead(uid);  // tarjeta nueva, o la misma tras retirarla
+      onReader = key;
+      await pause(RD.POLL);
+    }
+  } finally { polling = false; }
+}
+
+function cardRead(uid) {
+  if ($('card').disabled) return cardMsg('Esta cerradura no tiene gateway: no puede registrar tarjetas.', 'bad');
+  const num = uidDecInv(uid), el = $('card');
+  el.value = num; el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 900);
+  const owner = accesses.find(a => a.card_number === num && (a.state === 'active' || a.state === 'not_started'));
+  if (owner) cardMsg(`Esta tarjeta es de ${owner.guest_name}${owner.room_label ? ', hab. ' + owner.room_label : ''}.`, 'bad');
+  else cardMsg(`Tarjeta leída (UID ${uidHex(uid)}).`, 'ok');
+  $('create').focus();
+}
+
+function initReader() {
+  if (readerReady) return pollReader();
+  readerReady = true;
+  if (!hid) return cardMsg('Use Chrome o Edge para leer la tarjeta con el lector.');
+  $('reader').hidden = false; readerState();
+  $('readerBtn').onclick = async () => {
+    try {
+      const [d] = await hid.requestDevice({filters: [{vendorId: RD.VID, productId: RD.PID}]});
+      if (d) openReader(d); else cardMsg('No se seleccionó ningún lector.');
+    } catch (e) { cardMsg('No se pudo conectar el lector: ' + e.message, 'bad'); }
+  };
+  hid.addEventListener('disconnect', e => {
+    if (e.device === reader) { reader = null; onReader = null; readerState(); cardMsg('Se desconectó el lector.', 'bad'); }
+  });
+  document.addEventListener('visibilitychange', pollReader);
+  hid.getDevices().then(ds => {
+    const d = ds.find(x => x.vendorId === RD.VID && x.productId === RD.PID);
+    if (d) openReader(d);
+  }).catch(() => {});
+}
+$('card').addEventListener('input', () => cardMsg(''));
 
 if (apiKey) enter(); else showLogin();
 </script>

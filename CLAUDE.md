@@ -9,3 +9,4 @@ FastAPI que emite links tipo hotel (`/o/{token}`) para abrir una cerradura TTLoc
 - Sin probar contra cuenta/cerradura real todavía. `TTLOCK_API_BASE` por defecto `https://euapi.ttlock.com`; la doc usa `https://api.sciener.com`.
 - Producción (Docker): `docker compose up -d --build` con `.env` al lado; 1 solo worker (SQLite + token OAuth en memoria). Sin puertos publicados: se expone por un reverse proxy (Caddy) en la red `ttlink_ttlink_net`. SQLite en el volumen `ttlink_data` (`/data/ttlink.db`).
 - Respaldo: `backup_ttlink.sh` (copia SQLite consistente, cifrada con gpg; requiere `.backup_passphrase`, que no se versiona).
+- Lector RFID MR-11U (HID propietario, VID D808/PID 0201; protocolo en github.com/TechElectro/lector-mr11u): `/admin` lo lee por WebHID (Chrome/Edge) y escribe el UID en decimal invertido (little-endian), igual que `uid_teclado.py`. Con ese formato el servidor debe correr con `TTLOCK_CARD_REVERSED=true`.
